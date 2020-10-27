@@ -7,21 +7,23 @@ import numpy as np
 from PIL import Image
 from numpy import asarray
 from matplotlib.path import Path as MplPath
+import readDICOM_Image as readDICOM_Image
 
 
 class GraphicsItem(QGraphicsItem):  
     def __init__(self, coordLabel, meanLabel): 
         super(GraphicsItem, self).__init__()
+        #self.mypixmap = readDICOM_Image.returnPixelArray('IM_0001')
         self.mypixmap = QPixmap("KarlaOnMyShoulder.jpg")
         self.mypixmap = self.mypixmap.scaled(500, 500)
         self.width = float(self.mypixmap.width())
         self.height = float(self.mypixmap.height())
         self.last_x, self.last_y = None, None
-        self.pen_color = QColor("#000000")
+        self.pen_color = QColor("#FF0000")
         self.coordLabel = coordLabel
         self.meanLabel = meanLabel
         self.mainList = []
-        self.acceptHoverEvents(True)
+        self.setAcceptHoverEvents(True)
 
 
     def paint(self, painter, option, widget):
@@ -29,7 +31,7 @@ class GraphicsItem(QGraphicsItem):
         painter.drawPixmap(0,0, self.width, self.height, self.mypixmap)
         
 
-    def boundingRect(self):
+    def boundingRect(self):  
         return QRectF(0,0,self.width, self.height)
 
     def hoverMoveEvent(self, event):
@@ -49,7 +51,9 @@ class GraphicsItem(QGraphicsItem):
         p.setColor(self.pen_color)
         myPainter.setPen(p)
         #Draws a line from (x1 , y1 ) to (x2 , y2 ).
-        
+        xCoord = event.pos().x()
+        yCoord = event.pos().y()
+        self.coordLabel.setText("Mouse pointer @ X:{}, Y:{}".format(xCoord, yCoord))
         #print(self.last_x, self.last_y, xCoord, yCoord)
         myPainter.drawLine(self.last_x, self.last_y, xCoord, yCoord)
         myPainter.end()

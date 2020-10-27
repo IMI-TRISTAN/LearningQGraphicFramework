@@ -28,6 +28,7 @@
     <Compile Include="MapToScence.py">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="readDICOM_Image.py" />
     <Compile Include="RedundantCode.py">
       <SubType>Code</SubType>
     </Compile>
@@ -36,6 +37,7 @@
     </Compile>
   </ItemGroup>
   <ItemGroup>
+    <Content Include="IM_0001" />
     <Content Include="KarlaOnMyShoulder.jpg" />
   </ItemGroup>
   <Import Project="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.targets" />
