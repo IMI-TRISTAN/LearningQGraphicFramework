@@ -80,3 +80,14 @@ class Canvas(QGraphicsPixmapItem):
 
 #    def mouseMoveEvent(self, event):
 #        print('mouseMoveEvent: pos {}'.format(event.pos()))
+
+#The easiest way to do this is by picking out pixels in your image that correspond to places 
+#where the mask is white. If you want pixel on the boundary use the mask as you have shown it.
+# If you want pixel in (and on) the boundary; draw it instead as a filled contour (thickness=-1). 
+# Here's an example:
+
+img = cv2.imread('image.jpg')
+mask = cv2.imread('mask.png', 0)
+locs = np.where(mask == 255)
+pixels = img[locs]
+print(np.mean(pixels))

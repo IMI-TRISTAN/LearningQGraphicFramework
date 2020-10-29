@@ -15,7 +15,7 @@ class GraphicsItem(QGraphicsItem):
         super(GraphicsItem, self).__init__()
         #self.mypixmap = readDICOM_Image.returnPixelArray('IM_0001')
         self.mypixmap = QPixmap("KarlaOnMyShoulder.jpg")
-        self.mypixmap = self.mypixmap.scaled(500, 500)
+        self.mypixmap = self.mypixmap.scaled(2000, 2000)
         self.width = float(self.mypixmap.width())
         self.height = float(self.mypixmap.height())
         self.last_x, self.last_y = None, None
@@ -34,10 +34,17 @@ class GraphicsItem(QGraphicsItem):
     def boundingRect(self):  
         return QRectF(0,0,self.width, self.height)
 
+
     def hoverMoveEvent(self, event):
         xCoord = event.pos().x()
         yCoord = event.pos().y()
-        self.coordLabel.setText("Mouse pointer @ X:{}, Y:{}".format(xCoord, yCoord))
+        qimage = self.mypixmap.toImage()
+        pixelColour = qimage.pixelColor(xCoord,  yCoord ).getRgb()[:-1]
+        pixelValue = qimage.pixelColor(xCoord,  yCoord ).value()
+        self.coordLabel.setText("Pixel value {}, pixel colour {} @ X:{}, Y:{}".format(pixelValue, 
+                                                                                      pixelColour,
+                                                                                      xCoord, 
+                                                                                      yCoord))
 
 
     def mouseMoveEvent(self, event):
@@ -53,7 +60,9 @@ class GraphicsItem(QGraphicsItem):
         #Draws a line from (x1 , y1 ) to (x2 , y2 ).
         xCoord = event.pos().x()
         yCoord = event.pos().y()
-        self.coordLabel.setText("Mouse pointer @ X:{}, Y:{}".format(xCoord, yCoord))
+       # qimage = self.mypixmap.toImage()
+       # pixelValue = qimage.pixel(xCoord,  yCoord ).value()
+       # self.coordLabel.setText("Pixel value {} @ X:{}, Y:{}".format(pixelValue, xCoord, yCoord))
         #print(self.last_x, self.last_y, xCoord, yCoord)
         myPainter.drawLine(self.last_x, self.last_y, xCoord, yCoord)
         myPainter.end()
@@ -119,15 +128,47 @@ class graphicsView(QGraphicsView):
     def __init__(self, coordLabel, meanLabel):
         super(graphicsView, self).__init__()
         self.scene = QGraphicsScene(self)
-
+        self._zoom = 0
         self.graphicsItem = GraphicsItem(coordLabel, meanLabel)
-
-        self.myScale = 2
-        self.graphicsItem.setScale(self.myScale)
+        
+        #self.myScale = 2
+        #self.graphicsItem.setScale(self.myScale)
+        self.fitInView()
 
         self.setScene(self.scene)
+        #self.setDragMode(QGraphicsView.ScrollHandDrag)
+        self.setTransformationAnchor(QGraphicsView.AnchorUnderMouse)
+        self.setResizeAnchor(QGraphicsView.AnchorUnderMouse)
+        #self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+       # self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.scene.addItem(self.graphicsItem)
 
+    def wheelEvent(self, event):
+        if event.angleDelta().y() > 0:
+            factor = 1.25
+            self._zoom += 1
+        else:
+            factor = 0.8
+            self._zoom -= 1
+        if self._zoom > 0:
+            self.scale(factor, factor)
+        elif self._zoom == 0:
+            self.fitInView()
+        else:
+            self._zoom = 0
+
+    def fitInView(self, scale=True):
+        rect = QRectF(self.graphicsItem.mypixmap.rect())
+        if not rect.isNull():
+            self.setSceneRect(rect)
+            unity = self.transform().mapRect(QRectF(0, 0, 1, 1))
+            self.scale(1 / unity.width(), 1 / unity.height())
+            viewrect = self.viewport().rect()
+            scenerect = self.transform().mapRect(rect)
+            factor = min(viewrect.width() / scenerect.width(),
+                            viewrect.height() / scenerect.height())
+            self.scale(factor, factor)
+            self._zoom = 0
 
 class Example(QMainWindow):    
     def __init__(self):

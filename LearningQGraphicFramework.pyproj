@@ -35,6 +35,9 @@
     <Compile Include="DrawingROI.py">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="zoomExample.py">
+      <SubType>Code</SubType>
+    </Compile>
   </ItemGroup>
   <ItemGroup>
     <Content Include="IM_0001" />
