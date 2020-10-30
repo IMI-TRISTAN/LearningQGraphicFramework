@@ -24,6 +24,9 @@
     <Compile Include="example1.py">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="FormUI.py">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="LearningQGraphicFramework.py" />
     <Compile Include="MapToScence.py">
       <SubType>Code</SubType>
@@ -33,6 +36,9 @@
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="DrawingROI.py">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="splitterExample.py">
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="zoomExample.py">

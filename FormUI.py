@@ -1,0 +1,200 @@
+from PyQt5 import QtGui, QtCore
+
+#from PyQt5.QtCore import (QRectF, Qt)
+#from PyQt5.QtGui import (QPainter, QPixmap, QColor, QImage)
+from PyQt5.QtWidgets import *
+#from ..widgets.HistogramLUTWidget import HistogramLUTWidget
+#from ..widgets.GraphicsView import GraphicsView
+#from ..widgets.PlotWidget import PlotWidget
+
+class HistogramLUTWidget(GraphicsView):
+    
+    def __init__(self, parent=None,  *args, **kargs):
+        background = kargs.get('background', 'default')
+        GraphicsView.__init__(self, parent, useOpenGL=False, background=background)
+        self.item = HistogramLUTItem(*args, **kargs)
+        self.setCentralItem(self.item)
+        self.setSizePolicy(QtGui.QSizePolicy.Preferred, QtGui.QSizePolicy.Expanding)
+        self.setMinimumWidth(95)
+        
+
+    def sizeHint(self):
+        return QtCore.QSize(115, 200)
+    
+    def getHistogram(self):
+        return self.item
+
+    def __getattr__(self, attr):
+        return getattr(self.item, attr)
+
+class Ui_Form(object):
+    def setupUi(self, Form):
+        Form.setObjectName("Form")
+        Form.resize(726, 588)
+        self.gridLayout_3 = QGridLayout(Form)
+        #self.gridLayout_3.setContentsMargins(0)
+        self.gridLayout_3.setSpacing(0)
+        self.gridLayout_3.setObjectName("gridLayout_3")
+        self.splitter = QSplitter(Form)
+        self.splitter.setOrientation(QtCore.Qt.Vertical)
+        self.splitter.setObjectName("splitter")
+        self.layoutWidget = QWidget(self.splitter)
+        self.layoutWidget.setObjectName("layoutWidget")
+        self.gridLayout = QGridLayout(self.layoutWidget)
+        self.gridLayout.setSpacing(0)
+        #self.gridLayout.setContentsMargins(0)
+        self.gridLayout.setObjectName("gridLayout")
+        self.graphicsView = QGraphicsView(self.layoutWidget)  #!
+        self.graphicsView.setObjectName("graphicsView")
+        self.gridLayout.addWidget(self.graphicsView, 0, 0, 2, 1)
+        #self.histogram = HistogramLUTWidget(self.layoutWidget)
+        #self.histogram.setObjectName("histogram")
+        #self.gridLayout.addWidget(self.histogram, 0, 1, 1, 2)
+        self.roiBtn = QPushButton(self.layoutWidget)
+        sizePolicy = QSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
+        sizePolicy.setHorizontalStretch(0)
+        sizePolicy.setVerticalStretch(1)
+        sizePolicy.setHeightForWidth(self.roiBtn.sizePolicy().hasHeightForWidth())
+        self.roiBtn.setSizePolicy(sizePolicy)
+        self.roiBtn.setCheckable(True)
+        self.roiBtn.setObjectName("roiBtn")
+        self.gridLayout.addWidget(self.roiBtn, 1, 1, 1, 1)
+        self.menuBtn = QPushButton(self.layoutWidget)
+        sizePolicy = QSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
+        sizePolicy.setHorizontalStretch(0)
+        sizePolicy.setVerticalStretch(1)
+        sizePolicy.setHeightForWidth(self.menuBtn.sizePolicy().hasHeightForWidth())
+        self.menuBtn.setSizePolicy(sizePolicy)
+        self.menuBtn.setObjectName("menuBtn")
+        self.gridLayout.addWidget(self.menuBtn, 1, 2, 1, 1)
+        #self.roiPlot = PlotWidget(self.splitter)
+        sizePolicy = QSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
+        sizePolicy.setHorizontalStretch(0)
+        sizePolicy.setVerticalStretch(0)
+        #sizePolicy.setHeightForWidth(self.roiPlot.sizePolicy().hasHeightForWidth())
+        #self.roiPlot.setSizePolicy(sizePolicy)
+        #self.roiPlot.setMinimumSize(QtCore.QSize(0, 40))
+        #self.roiPlot.setObjectName(_fromUtf8("roiPlot"))
+        self.gridLayout_3.addWidget(self.splitter, 0, 0, 1, 1)
+        self.normGroup = QGroupBox(Form)
+        self.normGroup.setObjectName("normGroup")
+        self.gridLayout_2 = QGridLayout(self.normGroup)
+        #self.gridLayout_2.setContentsMargins(0)
+        self.gridLayout_2.setSpacing(0)
+        self.gridLayout_2.setObjectName("gridLayout_2")
+        self.normSubtractRadio = QRadioButton(self.normGroup)
+        self.normSubtractRadio.setObjectName("normSubtractRadio")
+        self.gridLayout_2.addWidget(self.normSubtractRadio, 0, 2, 1, 1)
+        self.normDivideRadio = QRadioButton(self.normGroup)
+        self.normDivideRadio.setChecked(False)
+        self.normDivideRadio.setObjectName("normDivideRadio")
+        self.gridLayout_2.addWidget(self.normDivideRadio, 0, 1, 1, 1)
+        self.label_5 = QLabel(self.normGroup)
+        font = QtGui.QFont()
+        font.setBold(True)
+        font.setWeight(75)
+        self.label_5.setFont(font)
+        self.label_5.setObjectName("label_5")
+        self.gridLayout_2.addWidget(self.label_5, 0, 0, 1, 1)
+        self.label_3 = QLabel(self.normGroup)
+        font = QtGui.QFont()
+        font.setBold(True)
+        font.setWeight(75)
+        self.label_3.setFont(font)
+        self.label_3.setObjectName("label_3")
+        self.gridLayout_2.addWidget(self.label_3, 1, 0, 1, 1)
+        self.label_4 = QLabel(self.normGroup)
+        font = QtGui.QFont()
+        font.setBold(True)
+        font.setWeight(75)
+        self.label_4.setFont(font)
+        self.label_4.setObjectName("label_4")
+        self.gridLayout_2.addWidget(self.label_4, 2, 0, 1, 1)
+        self.normROICheck = QCheckBox(self.normGroup)
+        self.normROICheck.setObjectName("normROICheck")
+        self.gridLayout_2.addWidget(self.normROICheck, 1, 1, 1, 1)
+        self.normXBlurSpin = QDoubleSpinBox(self.normGroup)
+        self.normXBlurSpin.setObjectName("normXBlurSpin")
+        self.gridLayout_2.addWidget(self.normXBlurSpin, 2, 2, 1, 1)
+        self.label_8 = QLabel(self.normGroup)
+        self.label_8.setAlignment(QtCore.Qt.AlignRight|QtCore.Qt.AlignTrailing|QtCore.Qt.AlignVCenter)
+        self.label_8.setObjectName("label_8")
+        self.gridLayout_2.addWidget(self.label_8, 2, 1, 1, 1)
+        self.label_9 = QLabel(self.normGroup)
+        self.label_9.setAlignment(QtCore.Qt.AlignRight|QtCore.Qt.AlignTrailing|QtCore.Qt.AlignVCenter)
+        self.label_9.setObjectName("label_9")
+        self.gridLayout_2.addWidget(self.label_9, 2, 3, 1, 1)
+        self.normYBlurSpin = QDoubleSpinBox(self.normGroup)
+        self.normYBlurSpin.setObjectName("normYBlurSpin")
+        self.gridLayout_2.addWidget(self.normYBlurSpin, 2, 4, 1, 1)
+        self.label_10 = QLabel(self.normGroup)
+        self.label_10.setAlignment(QtCore.Qt.AlignRight|QtCore.Qt.AlignTrailing|QtCore.Qt.AlignVCenter)
+        self.label_10.setObjectName("label_10")
+        self.gridLayout_2.addWidget(self.label_10, 2, 5, 1, 1)
+        self.normOffRadio = QRadioButton(self.normGroup)
+        self.normOffRadio.setChecked(True)
+        self.normOffRadio.setObjectName("normOffRadio")
+        self.gridLayout_2.addWidget(self.normOffRadio, 0, 3, 1, 1)
+        self.normTimeRangeCheck = QCheckBox(self.normGroup)
+        self.normTimeRangeCheck.setObjectName("normTimeRangeCheck")
+        self.gridLayout_2.addWidget(self.normTimeRangeCheck, 1, 3, 1, 1)
+        self.normFrameCheck = QCheckBox(self.normGroup)
+        self.normFrameCheck.setObjectName("normFrameCheck")
+        self.gridLayout_2.addWidget(self.normFrameCheck, 1, 2, 1, 1)
+        self.normTBlurSpin = QDoubleSpinBox(self.normGroup)
+        self.normTBlurSpin.setObjectName("normTBlurSpin")
+        self.gridLayout_2.addWidget(self.normTBlurSpin, 2, 6, 1, 1)
+        self.gridLayout_3.addWidget(self.normGroup, 1, 0, 1, 1)
+
+        #self.retranslateUi(Form)
+        QtCore.QMetaObject.connectSlotsByName(Form)
+
+    def retranslateUi(self, Form):
+        Form.setWindowTitle(_translate("Form", "Form", None))
+        self.roiBtn.setText(_translate("Form", "ROI", None))
+        self.menuBtn.setText(_translate("Form", "Menu", None))
+        self.normGroup.setTitle(_translate("Form", "Normalization", None))
+        self.normSubtractRadio.setText(_translate("Form", "Subtract", None))
+        self.normDivideRadio.setText(_translate("Form", "Divide", None))
+        self.label_5.setText(_translate("Form", "Operation:", None))
+        self.label_3.setText(_translate("Form", "Mean:", None))
+        self.label_4.setText(_translate("Form", "Blur:", None))
+        self.normROICheck.setText(_translate("Form", "ROI", None))
+        self.label_8.setText(_translate("Form", "X", None))
+        self.label_9.setText(_translate("Form", "Y", None))
+        self.label_10.setText(_translate("Form", "T", None))
+        self.normOffRadio.setText(_translate("Form", "Off", None))
+        self.normTimeRangeCheck.setText(_translate("Form", "Time range", None))
+        self.normFrameCheck.setText(_translate("Form", "Frame", None))
+
+#from ..widgets.HistogramLUTWidget import HistogramLUTWidget
+#from ..widgets.GraphicsView import GraphicsView
+#from ..widgets.PlotWidget import PlotWidget
+
+class Example(QMainWindow):    
+    def __init__(self):
+        super(Example, self).__init__()
+
+        self.ui = Ui_Form()
+        self.ui.setupUi(self)
+        self.scene = self.ui.graphicsView.scene()
+
+        self.centralwidget = QWidget(self)
+        self.setCentralWidget(self.centralwidget)
+        self.centralwidget.setLayout(QVBoxLayout(self.centralwidget))
+        #self.coordsLabel = QLabel("Mouse Coords")
+        #self.meanLabel = QLabel("ROI Mean Value")
+        #self.graphicsView = graphicsView(self.coordsLabel, self.meanLabel)
+        #self.centralwidget.layout().addWidget(self.graphicsView)
+        #self.centralwidget.layout().addWidget(self.coordsLabel)
+        #self.centralwidget.layout().addWidget(self.meanLabel)
+
+        #self.setCentralWidget(self.y)
+
+
+if __name__ == '__main__':
+    import sys
+    app = QApplication(sys.argv)
+    w = Example()
+    w.show()
+    sys.exit(app.exec_())
