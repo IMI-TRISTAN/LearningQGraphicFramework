@@ -3,12 +3,139 @@ from PyQt5.QtCore import (QRectF, Qt)
 from PyQt5.QtGui import (QPainter, QPixmap, QColor, QImage)
 from PyQt5.QtWidgets import (QMainWindow, QApplication, QVBoxLayout,
                              QGraphicsObject, QGraphicsView, QWidget,
-                             QGraphicsScene, QGraphicsItem, QLabel)
+                             QGraphicsScene, QGraphicsItem, QLabel, 
+                             QDoubleSpinBox, QGridLayout, QComboBox)
 import numpy as np
+from numpy import nanmin, nanmax
 from PIL import Image
 from numpy import asarray
 from matplotlib.path import Path as MplPath
 import readDICOM_Image as readDICOM_Image
+import scipy
+from matplotlib import cm
+
+#'useOpenGL': useOpenGL, ## by default, this is platform-dependent (see widgets/GraphicsView). Set to True or False to explicitly enable/disable opengl.
+
+CONFIG_OPTIONS = {
+    'leftButtonPan': True,  ## if false, left button drags a rubber band for zooming in viewbox
+    'foreground': 'd',  ## default foreground color for axes, labels, etc.
+    'background': 'k',        ## default background for GraphicsWidget
+    'antialias': False,
+    'editorCommand': None,  ## command used to invoke code editor from ConsoleWidgets
+    'useWeave': False,       ## Use weave to speed up some operations, if it is available
+    'weaveDebug': False,    ## Print full error message if weave compile fails
+    'exitCleanup': True,    ## Attempt to work around some exit crash bugs in PyQt and PySide
+    'enableExperimental': False, ## Enable experimental features (the curious can search for this key in the code)
+    'crashWarning': False,  # If True, print warnings about situations that may result in a crash
+} 
+
+#List of colour tables supported by matplotlib
+listColours = ['gray', 'cividis',  'magma', 'plasma', 'viridis', 
+             'Greys', 'Purples', 'Blues', 'Greens', 'Oranges', 'Reds',
+            'YlOrBr', 'YlOrRd', 'OrRd', 'PuRd', 'RdPu', 'BuPu',
+            'GnBu', 'PuBu', 'YlGnBu', 'PuBuGn', 'BuGn', 'YlGn',
+            'binary', 'gist_yarg', 'gist_gray', 'bone', 'pink',
+            'spring', 'summer', 'autumn', 'winter', 'cool', 'Wistia',
+            'hot', 'afmhot', 'gist_heat', 'copper',
+            'PiYG', 'PRGn', 'BrBG', 'PuOr', 'RdGy', 'RdBu',
+            'RdYlBu', 'RdYlGn', 'Spectral', 'coolwarm', 'bwr', 'seismic',
+            'twilight', 'twilight_shifted', 'hsv',
+            'flag', 'prism', 'ocean', 'gist_earth', 'terrain', 'gist_stern',
+            'gnuplot', 'gnuplot2', 'CMRmap', 'cubehelix', 'brg',
+            'gist_rainbow', 'rainbow', 'jet', 'nipy_spectral', 'gist_ncar', 'custom']
+
+def setConfigOption(opt, value):
+    CONFIG_OPTIONS[opt] = value
+
+
+def setConfigOptions(**opts):
+    CONFIG_OPTIONS.update(opts)
+
+
+def getConfigOption(opt):
+    return CONFIG_OPTIONS[opt]
+
+
+def quickMinMax(data):
+        """
+        Estimate the min/max values of *data* by subsampling.
+        """
+        while data.size > 1e6:
+            ax = np.argmax(data.shape)
+            sl = [slice(None)] * data.ndim
+            sl[ax] = slice(None, None, 2)
+            data = data[sl]
+        return nanmin(data), nanmax(data)
+
+
+def rescaleData(data, scale, offset, dtype=None):
+    """Return data rescaled and optionally cast to a new dtype::
+    
+        data => (data-offset) * scale
+        
+    Uses scipy.weave (if available) to improve performance.
+    """
+    if dtype is None:
+        dtype = data.dtype
+    else:
+        dtype = np.dtype(dtype)
+    
+    try:
+        if not getConfigOption('useWeave'):
+            raise Exception('Weave is disabled; falling back to slower version.')
+        try:
+            import scipy.weave
+        except ImportError:
+            raise Exception('scipy.weave is not importable; falling back to slower version.')
+        
+        ## require native dtype when using weave
+        if not data.dtype.isnative:
+            data = data.astype(data.dtype.newbyteorder('='))
+        if not dtype.isnative:
+            weaveDtype = dtype.newbyteorder('=')
+        else:
+            weaveDtype = dtype
+        
+        newData = np.empty((data.size,), dtype=weaveDtype)
+        flat = np.ascontiguousarray(data).reshape(data.size)
+        size = data.size
+        
+        code = """
+        double sc = (double)scale;
+        double off = (double)offset;
+        for( int i=0; i<size; i++ ) {
+            newData[i] = ((double)flat[i] - off) * sc;
+        }
+        """
+        scipy.weave.inline(code, ['flat', 'newData', 'size', 'offset', 'scale'], compiler='gcc')
+        if dtype != weaveDtype:
+            newData = newData.astype(dtype)
+        data = newData.reshape(data.shape)
+    except:
+        if getConfigOption('useWeave'):
+            if getConfigOption('weaveDebug'):
+                debug.printExc("Error; disabling weave.")
+            setConfigOptions(useWeave=False)
+        
+        #p = np.poly1d([scale, -offset*scale])
+        #data = p(data).astype(dtype)
+        d2 = data-offset
+        d2 *= scale
+        data = d2.astype(dtype)
+    return data
+    
+
+def applyLookupTable(data, lut):
+    """
+    Uses values in *data* as indexes to select values from *lut*.
+    The returned data has shape data.shape + lut.shape[1:]
+    
+    Note: color gradient lookup tables can be generated using GradientWidget.
+    """
+    if data.dtype.kind not in ('i', 'u'):
+        data = data.astype(int)
+    
+    return np.take(lut, data, axis=0, mode='clip')  
 
 
 def makeARGB(data, lut=None, levels=None, scale=None, useRGBA=False): 
@@ -54,8 +181,6 @@ def makeARGB(data, lut=None, levels=None, scale=None, useRGBA=False):
                    is BGRA).
     ============== ==================================================================================
     """
-    
-    
     if lut is not None and not isinstance(lut, np.ndarray):
         lut = np.array(lut)
     if levels is not None and not isinstance(levels, np.ndarray):
@@ -73,8 +198,6 @@ def makeARGB(data, lut=None, levels=None, scale=None, useRGBA=False):
         else:
             print(levels)
             raise Exception("levels argument must be 1D or 2D.")
-
-    
 
     if scale is None:
         if lut is not None:
@@ -105,8 +228,6 @@ def makeARGB(data, lut=None, levels=None, scale=None, useRGBA=False):
             else:
                 data = rescaleData(data, scale/(maxVal-minVal), minVal, dtype=int)
 
-    
-
     ## apply LUT if given
     if lut is not None:
         data = applyLookupTable(data, lut)
@@ -114,12 +235,8 @@ def makeARGB(data, lut=None, levels=None, scale=None, useRGBA=False):
         if data.dtype is not np.ubyte:
             data = np.clip(data, 0, 255).astype(np.ubyte)
 
-    
-
     ## copy data into ARGB ordered array
     imgData = np.empty(data.shape[:2]+(4,), dtype=np.ubyte)
-
-    
 
     if useRGBA:
         order = [0,1,2,3] ## array comes out RGBA
@@ -139,15 +256,12 @@ def makeARGB(data, lut=None, levels=None, scale=None, useRGBA=False):
         for i in range(0, data.shape[2]):
             imgData[..., i] = data[..., order[i]] 
         
-    
-        
     if data.ndim == 2 or data.shape[2] == 3:
         alpha = False
         imgData[..., 3] = 255
     else:
         alpha = True
         
-    
     return imgData, alpha
 
 
@@ -179,7 +293,6 @@ def makeQImage(imgData, alpha=None, copy=True, transpose=True):
     """
     ## create QImage from buffer
     
-    
     ## If we didn't explicitly specify alpha, check the array shape.
     if alpha is None:
         alpha = (imgData.shape[2] == 4)
@@ -203,8 +316,6 @@ def makeQImage(imgData, alpha=None, copy=True, transpose=True):
     if transpose:
         imgData = imgData.transpose((1, 0, 2))  ## QImage expects the row/column order to be opposite
 
-    
-
     if not imgData.flags['C_CONTIGUOUS']:
         if copy is False:
             extra = ' (try setting transpose=False)' if transpose else ''
@@ -215,57 +326,22 @@ def makeQImage(imgData, alpha=None, copy=True, transpose=True):
     if copy is True and copied is False:
         imgData = imgData.copy()
         
-    if USE_PYSIDE:
-        ch = ctypes.c_char.from_buffer(imgData, 0)
-        img = QtGui.QImage(ch, imgData.shape[1], imgData.shape[0], imgFormat)
-    else:
-        #addr = ctypes.addressof(ctypes.c_char.from_buffer(imgData, 0))
-        ## PyQt API for QImage changed between 4.9.3 and 4.9.6 (I don't know exactly which version it was)
-        ## So we first attempt the 4.9.6 API, then fall back to 4.9.3
-        #addr = ctypes.c_char.from_buffer(imgData, 0)
-        #try:
-            #img = QtGui.QImage(addr, imgData.shape[1], imgData.shape[0], imgFormat)
-        #except TypeError:  
-            #addr = ctypes.addressof(addr)
-            #img = QtGui.QImage(addr, imgData.shape[1], imgData.shape[0], imgFormat)
-        try:
-            img = QtGui.QImage(imgData.ctypes.data, imgData.shape[1], imgData.shape[0], imgFormat)
-        except:
-            if copy:
-                # does not leak memory, is not mutable
-                img = QtGui.QImage(buffer(imgData), imgData.shape[1], imgData.shape[0], imgFormat)
-            else:
-                # mutable, but leaks memory
-                img = QtGui.QImage(memoryview(imgData), imgData.shape[1], imgData.shape[0], imgFormat)
-                
+    img = QImage(imgData.ctypes.data, imgData.shape[1], imgData.shape[0], imgFormat)            
     img.data = imgData
     return img
-    #try:
-        #buf = imgData.data
-    #except AttributeError:  ## happens when image data is non-contiguous
-        #buf = imgData.data
-        
-    #profiler()
-    #qimage = QtGui.QImage(buf, imgData.shape[1], imgData.shape[0], imgFormat)
-    #profiler()
-    #qimage.data = imgData
-    #return qimage
+   
 
 class GraphicsItem(QGraphicsItem):  
     def __init__(self, coordLabel, meanLabel): 
         super(GraphicsItem, self).__init__()
-        pixelArray = readDICOM_Image.returnPixelArray('IM_0001').copy()
-        #xLen, yLen = pixelArray.s
-        #im = QImage(pixelArray, 500, 500, QImage.Format_RGB32)
-        #im = Image.fromarray(pixelArray)
-        self.qimage = QImage(pixelArray, pixelArray.shape[1], pixelArray.shape[0],                                                                                                                                                 
-                    QImage.Format_ARGB32) #QImage.Format_ARGB32
-        #qimage.setColorTable([QtGui.qRgb(i, i, i) for i in range(256)])
-
+        self.pixelArray = readDICOM_Image.returnPixelArray('IM_0001').copy()
+        minValue, maxValue = quickMinMax(self.pixelArray)
+        self.contrast = maxValue - minValue
+        self.intensity = minValue + (maxValue - minValue)/2
+        imgData, alpha = makeARGB(data=self.pixelArray, levels=[minValue, maxValue])
+        self.qimage = makeQImage(imgData, alpha)
         self.mypixmap = QPixmap.fromImage(self.qimage)
-        #self.mypixmap = QPixmap( qimage)
         #self.mypixmap = QPixmap("KarlaOnMyShoulder.jpg")
-        self.mypixmap = self.mypixmap.scaled(2000, 2000)
         self.width = float(self.mypixmap.width())
         self.height = float(self.mypixmap.height())
         self.last_x, self.last_y = None, None
@@ -285,6 +361,32 @@ class GraphicsItem(QGraphicsItem):
 
     def boundingRect(self):  
         return QRectF(0,0,self.width, self.height)
+
+
+    #def updateImageLevels(self, spinBoxIntensity, spinBoxContrast):
+    #    """When the contrast and intensity values are adjusted using the spinboxes, 
+    #    this function sets the corresponding values in the image being viewed. 
+    
+    #    Input Parmeters
+    #    ***************
+    #        self - an object reference to the WEASEL interface.
+    #        imv - pyqtGraph imageView widget
+    #        spinBoxIntensity - name of the spinbox widget that displays/sets image intensity.
+    #        spinBoxContrast - name of the spinbox widget that displays/sets image contrast.
+    #    """
+    #try:
+    #    intensityValue = spinBoxIntensity.value()
+    #    contrastValue = spinBoxContrast.value()
+    #    print('intensityValue {} contrastValue {}'.format(intensityValue, contrastValue))
+    #    halfWidth = contrastValue/2
+    #    minimumValue = intensityValue - halfWidth
+    #    maximumValue = intensityValue + halfWidth
+    #    imgData, alpha = makeARGB(data=self.pixelArray, levels=[minimumValue,  maximumValue])
+    #    self.qimage = makeQImage(imgData, alpha)
+    #    self.mypixmap = QPixmap.fromImage(self.qimage)
+    #    self.update()
+    #except Exception as e:
+    #    print('Error in updateImageLevels: ' + str(e))
 
 
     def hoverMoveEvent(self, event):
@@ -313,10 +415,6 @@ class GraphicsItem(QGraphicsItem):
         #Draws a line from (x1 , y1 ) to (x2 , y2 ).
         xCoord = event.pos().x()
         yCoord = event.pos().y()
-       # qimage = self.mypixmap.toImage()
-       # pixelValue = qimage.pixel(xCoord,  yCoord ).value()
-       # self.coordLabel.setText("Pixel value {} @ X:{}, Y:{}".format(pixelValue, xCoord, yCoord))
-        #print(self.last_x, self.last_y, xCoord, yCoord)
         myPainter.drawLine(self.last_x, self.last_y, xCoord, yCoord)
         myPainter.end()
         self.update()
@@ -369,8 +467,8 @@ class GraphicsItem(QGraphicsItem):
         #print("mouseReleaseEvent ", event.pos())
         #print(self.mainList)
         #self.meanLabel
-        self.get_mean_and_std( self.mainList, "KarlaOnMyShoulder.jpg")
-        self.mainList = []
+        #self.get_mean_and_std( self.mainList, "KarlaOnMyShoulder.jpg")
+        #self.mainList = []
 
 
     def mousePressEvent(self, event):
@@ -395,6 +493,9 @@ class graphicsView(QGraphicsView):
         #self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
        # self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.scene.addItem(self.graphicsItem)
+
+    def returnGraphicsItem(self):
+        return self.graphicsItem
 
     def wheelEvent(self, event):
         if event.angleDelta().y() > 0:
@@ -422,6 +523,7 @@ class graphicsView(QGraphicsView):
                             viewrect.height() / scenerect.height())
             self.scale(factor, factor)
             self._zoom = 0
+        
 
 class Example(QMainWindow):    
     def __init__(self):
@@ -432,12 +534,117 @@ class Example(QMainWindow):
         self.centralwidget.setLayout(QVBoxLayout(self.centralwidget))
         self.coordsLabel = QLabel("Mouse Coords")
         self.meanLabel = QLabel("ROI Mean Value")
+        self.spinBoxIntensity = QDoubleSpinBox()
+        self.spinBoxContrast = QDoubleSpinBox()
+
         self.graphicsView = graphicsView(self.coordsLabel, self.meanLabel)
+        
+        lblIntensity = QLabel("Centre (Intensity)")
+        lblContrast = QLabel("Width (Contrast)")
+        lblIntensity.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        lblContrast.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            
+        self.spinBoxIntensity.setMinimum(-100000.00)
+        self.spinBoxContrast.setMinimum(-100000.00)
+        self.spinBoxIntensity.setMaximum(1000000000.00)
+        self.spinBoxContrast.setMaximum(1000000000.00)
+        self.spinBoxIntensity.setWrapping(True)
+        self.spinBoxContrast.setWrapping(True)
+        self.spinBoxIntensity.setValue(self.graphicsView.graphicsItem.intensity)
+        self.spinBoxContrast.setValue(self.graphicsView.graphicsItem.contrast)
+        gridLayoutLevels = QGridLayout()
+        gridLayoutLevels.addWidget(lblIntensity, 0,0)
+        gridLayoutLevels.addWidget(self.spinBoxIntensity, 0, 1)
+        gridLayoutLevels.addWidget(lblContrast, 0,2)
+        gridLayoutLevels.addWidget(self.spinBoxContrast, 0,3)
+
+        self.cmbColours = QComboBox()
+        self.cmbColours.blockSignals(True)
+        self.cmbColours.addItems(listColours)
+        self.cmbColours.setCurrentIndex(0)
+        self.cmbColours.blockSignals(False)
+        
+
+        self.spinBoxIntensity.valueChanged.connect(lambda: self.updateImageLevels(self.spinBoxIntensity, self.spinBoxContrast))
+        self.spinBoxContrast.valueChanged.connect(lambda: self.updateImageLevels(self.spinBoxIntensity, self.spinBoxContrast))
+        #self.graphicsView.graphicsItem
         self.centralwidget.layout().addWidget(self.graphicsView)
+        self.centralwidget.layout().addLayout(gridLayoutLevels)
+        #self.centralwidget.layout().addWidget(self.cmbColours)
         self.centralwidget.layout().addWidget(self.coordsLabel)
         self.centralwidget.layout().addWidget(self.meanLabel)
+        #self.cmbColours.currentIndexChanged.connect(lambda: self.setColourMap(self.cmbColours))
 
-        #self.setCentralWidget(self.y)
+    def setColourMap(self, colourList):
+        """This function converts a matplotlib colour map into
+        a colour map that can be used by the pyqtGraph imageView widget.
+    
+        Input Parmeters
+        ***************
+            colourTable - name of the colour map
+            imv - name of the imageView widget
+            cmbColours - name of the dropdown lists of colour map names
+            lut - name of the look up table containing raw colour data
+        """
+
+        try:
+            colourTable = colourList.currentText()
+            if colourTable == None:
+                colourTable = 'gray'
+
+           # if cmbColours:
+            #    displayColourTableInComboBox(cmbColours, colourTable)   
+        
+            if colourTable == 'custom':
+                colors = lut
+            elif colourTable == 'gray':
+                colors = [[0.0, 0.0, 0.0, 1.0], [1.0, 1.0, 1.0, 1.0]]
+            else:
+                cmMap = cm.get_cmap(colourTable)
+                colourClassName = cmMap.__class__.__name__
+                if colourClassName == 'ListedColormap':
+                    colors = cmMap.colors
+                elif colourClassName == 'LinearSegmentedColormap':
+                    colors = cmMap(np.linspace(0, 1))
+          
+            positions = np.linspace(0, 1, len(colors))
+
+            imageItemPointer = self.graphicsView.graphicsItem
+            imgData, alpha = makeARGB(data=imageItemPointer.pixelArray, lut=colors)
+            imageItemPointer.qimage = makeQImage(imgData, alpha)
+            imageItemPointer.mypixmap = QPixmap.fromImage(imageItemPointer.qimage)
+            imageItemPointer.update()
+            #pgMap = pg.ColorMap(positions, colors)
+            #imv.setColorMap(pgMap)        
+        except Exception as e:
+            print('Error in setPgColourMap: ' + str(e))
+
+
+    def updateImageLevels(self, spinBoxIntensity, spinBoxContrast):
+        """When the contrast and intensity values are adjusted using the spinboxes, 
+        this function sets the corresponding values in the image being viewed. 
+    
+        Input Parmeters
+        ***************
+            self - an object reference to the WEASEL interface.
+            imv - pyqtGraph imageView widget
+            spinBoxIntensity - name of the spinbox widget that displays/sets image intensity.
+            spinBoxContrast - name of the spinbox widget that displays/sets image contrast.
+        """
+        try:
+            intensityValue = spinBoxIntensity.value()
+            contrastValue = spinBoxContrast.value()
+            halfWidth = contrastValue/2
+            minimumValue = intensityValue - halfWidth
+            maximumValue = intensityValue + halfWidth
+            imageItemPointer = self.graphicsView.graphicsItem
+            imgData, alpha = makeARGB(data=imageItemPointer.pixelArray, levels=[minimumValue,  maximumValue])
+            imageItemPointer.qimage = makeQImage(imgData, alpha)
+            imageItemPointer.mypixmap = QPixmap.fromImage(imageItemPointer.qimage)
+            imageItemPointer.update()
+        except Exception as e:
+            print('Error in updateImageLevels: ' + str(e))
+       
 
 
 if __name__ == '__main__':
