@@ -1,18 +1,15 @@
 from PyQt5 import QtGui
 from PyQt5.QtCore import (QRectF, Qt)
-from PyQt5.QtGui import (QPainter, QPixmap, QColor, QImage)
+from PyQt5.QtGui import (QPainter, QPixmap, QColor, QImage, qRgb)
 from PyQt5.QtWidgets import (QMainWindow, QApplication, QVBoxLayout,
                              QGraphicsObject, QGraphicsView, QWidget,
                              QGraphicsScene, QGraphicsItem, QLabel, 
                              QDoubleSpinBox, QGridLayout, QComboBox)
 import numpy as np
 from numpy import nanmin, nanmax
-from PIL import Image
-from numpy import asarray
 from matplotlib.path import Path as MplPath
 import readDICOM_Image as readDICOM_Image
 import scipy
-from matplotlib import cm
 
 #'useOpenGL': useOpenGL, ## by default, this is platform-dependent (see widgets/GraphicsView). Set to True or False to explicitly enable/disable opengl.
 
@@ -28,21 +25,6 @@ CONFIG_OPTIONS = {
     'enableExperimental': False, ## Enable experimental features (the curious can search for this key in the code)
     'crashWarning': False,  # If True, print warnings about situations that may result in a crash
 } 
-
-#List of colour tables supported by matplotlib
-listColours = ['gray', 'cividis',  'magma', 'plasma', 'viridis', 
-             'Greys', 'Purples', 'Blues', 'Greens', 'Oranges', 'Reds',
-            'YlOrBr', 'YlOrRd', 'OrRd', 'PuRd', 'RdPu', 'BuPu',
-            'GnBu', 'PuBu', 'YlGnBu', 'PuBuGn', 'BuGn', 'YlGn',
-            'binary', 'gist_yarg', 'gist_gray', 'bone', 'pink',
-            'spring', 'summer', 'autumn', 'winter', 'cool', 'Wistia',
-            'hot', 'afmhot', 'gist_heat', 'copper',
-            'PiYG', 'PRGn', 'BrBG', 'PuOr', 'RdGy', 'RdBu',
-            'RdYlBu', 'RdYlGn', 'Spectral', 'coolwarm', 'bwr', 'seismic',
-            'twilight', 'twilight_shifted', 'hsv',
-            'flag', 'prism', 'ocean', 'gist_earth', 'terrain', 'gist_stern',
-            'gnuplot', 'gnuplot2', 'CMRmap', 'cubehelix', 'brg',
-            'gist_rainbow', 'rainbow', 'jet', 'nipy_spectral', 'gist_ncar', 'custom']
 
 def setConfigOption(opt, value):
     CONFIG_OPTIONS[opt] = value
@@ -75,6 +57,7 @@ def rescaleData(data, scale, offset, dtype=None):
         
     Uses scipy.weave (if available) to improve performance.
     """
+   # print("rescaleData")
     if dtype is None:
         dtype = data.dtype
     else:
@@ -83,10 +66,10 @@ def rescaleData(data, scale, offset, dtype=None):
     try:
         if not getConfigOption('useWeave'):
             raise Exception('Weave is disabled; falling back to slower version.')
-        try:
-            import scipy.weave
-        except ImportError:
-            raise Exception('scipy.weave is not importable; falling back to slower version.')
+        #try:
+        #    import scipy.weave
+        #except ImportError:
+        #    raise Exception('scipy.weave is not importable; falling back to slower version.')
         
         ## require native dtype when using weave
         if not data.dtype.isnative:
@@ -340,136 +323,153 @@ class GraphicsItem(QGraphicsItem):
         self.intensity = minValue + (maxValue - minValue)/2
         imgData, alpha = makeARGB(data=self.pixelArray, levels=[minValue, maxValue])
         self.qimage = makeQImage(imgData, alpha)
-        self.mypixmap = QPixmap.fromImage(self.qimage)
-        #self.mypixmap = QPixmap("KarlaOnMyShoulder.jpg")
-        self.width = float(self.mypixmap.width())
-        self.height = float(self.mypixmap.height())
+        self.pixMap = QPixmap.fromImage(self.qimage)
+        self.width = float(self.pixMap.width())
+        self.height = float(self.pixMap.height())
         self.last_x, self.last_y = None, None
-        self.pen_color = QColor("#FF0000")
+        self.start_x = None
+        self.start_y = None
         self.coordLabel = coordLabel
         self.meanLabel = meanLabel
-        self.mainList = []
+        self.pathCoordsList = []
         self.setAcceptHoverEvents(True)
+        self.mask = None
+        self.drawRoi = True
+        self.pixelColour = None
+        self.pixelValue = None
 
 
     def paint(self, painter, option, widget):
         painter.setOpacity(1)
-        painter.drawPixmap(0,0, self.width, self.height, self.mypixmap)
-        #painter.drawImage(QRectF(0,0,self.width,self.height), self.qimage)
-        #p.drawImage(QtCore.QRectF(0,0,self.image.shape[0],self.image.shape[1]), self.qimage)
+        painter.drawPixmap(0,0, self.width, self.height, self.pixMap)
         
 
     def boundingRect(self):  
         return QRectF(0,0,self.width, self.height)
 
 
-    #def updateImageLevels(self, spinBoxIntensity, spinBoxContrast):
-    #    """When the contrast and intensity values are adjusted using the spinboxes, 
-    #    this function sets the corresponding values in the image being viewed. 
-    
-    #    Input Parmeters
-    #    ***************
-    #        self - an object reference to the WEASEL interface.
-    #        imv - pyqtGraph imageView widget
-    #        spinBoxIntensity - name of the spinbox widget that displays/sets image intensity.
-    #        spinBoxContrast - name of the spinbox widget that displays/sets image contrast.
-    #    """
-    #try:
-    #    intensityValue = spinBoxIntensity.value()
-    #    contrastValue = spinBoxContrast.value()
-    #    print('intensityValue {} contrastValue {}'.format(intensityValue, contrastValue))
-    #    halfWidth = contrastValue/2
-    #    minimumValue = intensityValue - halfWidth
-    #    maximumValue = intensityValue + halfWidth
-    #    imgData, alpha = makeARGB(data=self.pixelArray, levels=[minimumValue,  maximumValue])
-    #    self.qimage = makeQImage(imgData, alpha)
-    #    self.mypixmap = QPixmap.fromImage(self.qimage)
-    #    self.update()
-    #except Exception as e:
-    #    print('Error in updateImageLevels: ' + str(e))
-
-
     def hoverMoveEvent(self, event):
         if self.isUnderMouse():
-            xCoord = event.pos().x()
-            yCoord = event.pos().y()
-            qimage = self.mypixmap.toImage()
-            pixelColour = qimage.pixelColor(xCoord,  yCoord ).getRgb()[:-1]
-            pixelValue = qimage.pixelColor(xCoord,  yCoord ).value()
-            self.coordLabel.setText("Pixel value {}, pixel colour {} @ X:{}, Y:{}".format(pixelValue, 
-                                                                                      pixelColour,
+            xCoord = int(event.pos().x())
+            yCoord = int(event.pos().y())
+            #qimage = self.pixMap.toImage()
+            self.pixelColour = self.qimage.pixelColor(xCoord,  yCoord ).getRgb()[:-1]
+            self.pixelValue = self.qimage.pixelColor(xCoord,  yCoord ).value()
+            self.coordLabel.setText("Pixel value {}, pixel colour {} @ X:{}, Y:{}".format(self.pixelValue, 
+                                                                                      self.pixelColour,
                                                                                       xCoord, 
                                                                                       yCoord))
 
 
     def mouseMoveEvent(self, event):
-        if self.last_x is None: # First event.
-          self.last_x = (event.pos()).x()
-          self.last_y = (event.pos()).y()
-          return #  Ignore the first time.
-        myPainter = QPainter(self.mypixmap)
-        p = myPainter.pen()
-        p.setWidth(4)
-        p.setColor(self.pen_color)
-        myPainter.setPen(p)
-        #Draws a line from (x1 , y1 ) to (x2 , y2 ).
-        xCoord = event.pos().x()
-        yCoord = event.pos().y()
-        myPainter.drawLine(self.last_x, self.last_y, xCoord, yCoord)
-        myPainter.end()
-        self.update()
-        # Update the origin for next time.
-        self.last_x = xCoord
-        self.last_y = yCoord
-        self.mainList.append([self.last_x, self.last_y])
+        if self.drawRoi:
+            if self.last_x is None: # First event.
+                self.last_x = (event.pos()).x()
+                self.last_y = (event.pos()).y()
+                self.start_x = int(self.last_x)
+                self.start_y = int(self.last_y)
+                return #  Ignore the first time.
+            self.myPainter = QtGui.QPainter(self.pixMap)
+            p = self.myPainter.pen()
+            p.setWidth(1) # 1 pixel
+            p.setColor(QtGui.QColor("#FF0000")) #red
+            self.myPainter.setPen(p)
+            #Draws a line from (x1 , y1 ) to (x2 , y2 ).
+            xCoord = event.pos().x()
+            yCoord = event.pos().y()
+            self.myPainter.drawLine(self.last_x, self.last_y, xCoord, yCoord)
+            self.myPainter.end() 
+            #The pixmap has changed (it was drawn on), so update it
+            #back to the original image
+            self.qimage =  self.pixMap.toImage()
+            self.update()
 
-
-    def get_mask(self, poly_verts, data):
-        ny, nx, nz = data.shape
-        #poly_verts = ([(self.x[0], self.y[0])]
-          #            + list(zip(reversed(self.x), reversed(self.y))))
-        # Create vertex coordinates for each grid cell...
-        # (<0,0> is at the top left of the grid in this system)
-        x, y = np.meshgrid(np.arange(nx), np.arange(ny))
-        x, y = x.flatten(), y.flatten()
-        points = np.vstack((x, y)).T
-
-        roi_path = MplPath(poly_verts)
-        grid = roi_path.contains_points(points).reshape((ny, nx))
-
-        ##Initialze QtGui.QImage() with arguments data, height, width, and QImage.Format
-        ##grid = np.array(grid).reshape(700150,700150).astype(np.int32) 
-        #qimage = QtGui.QImage(grid, grid.shape[0],grid.shape[1],QtGui.QImage.Format_RGB32)
-        ##img = PrintImage(QPixmap(qimage))
+            # Update the origin for next time.
+            self.last_x = xCoord
+            self.last_y = yCoord
+            self.pathCoordsList.append([self.last_x, self.last_y])
         
-        #print('mask={}'.format(np.extract(grid, current_image)))
-
-        #pix = QtGui.QPixmap.fromImage(roi_path)
-
-        #mask = QtGui.QPixmap(np.extract(grid, current_image))
-        #self.maskLabel.setPixmap(mask)
-        return grid
-    
-
-    def get_mean_and_std(self, poly_verts, current_image):
-        image = Image.open(current_image)
-        data = asarray(image)
-        mask = self.get_mask(poly_verts, data)
-        mean = round(np.mean(np.extract(mask, data)), 3)
-        std = round(np.std(np.extract(mask, data)), 3)
-        print('mean {}, std {}'.format(mean, std))
-        self.meanLabel.setText('mean {}, std {}'.format(mean, std))
-        #return mean, std
 
     def mouseReleaseEvent(self, event):
-        self.last_x = None
-        self.last_y = None
-        #print("mouseReleaseEvent ", event.pos())
-        #print(self.mainList)
-        #self.meanLabel
-        #self.get_mean_and_std( self.mainList, "KarlaOnMyShoulder.jpg")
-        #self.mainList = []
+        if self.drawRoi:
+            if  (self.last_x != None and self.start_x != None 
+                 and self.last_y != None and self.start_y != None):
+                if int(self.last_x) == self.start_x and int(self.last_y) == self.start_y:
+                    #free hand drawn ROI is closed, so no further action needed
+                    pass
+                else:
+                    #free hand drawn ROI is not closed, so need to draw a
+                    #straight line from the coordinates of its start to
+                    #the coordinates of its last point
+                    self.myPainter = QtGui.QPainter(self.pixMap)
+                    p = self.myPainter.pen()
+                    p.setWidth(1) #1 pixel
+                    p.setColor(QtGui.QColor("#FF0000")) #red
+                    self.myPainter.setPen(p)
+                    #self.myPainter.setRenderHint(QtGui.QPainter.Antialiasing)
+                    self.myPainter.drawLine(self.last_x, self.last_y, self.start_x, self.start_y)
+                    self.myPainter.end()
+                    self.qimage =  self.pixMap.toImage()
+                    self.update()
+                self.getMask(self.pathCoordsList)
+                listCoords = self.getListRoiInnerPoints(self.mask)
+                self.fillFreeHandRoi(listCoords)
+                self.start_x = None 
+                self.start_y = None
+                self.last_x = None
+                self.last_y = None
+                self.pathCoordsList = []
 
+
+    def fillFreeHandRoi(self, listCoords):
+        for coords in listCoords:
+            #x = coords[0]
+            #y = coords[1]
+            x = coords[1]
+            y = coords[0]
+            pixelColour = self.qimage.pixel(x, y) 
+            pixelRGB =  QtGui.QColor(pixelColour).getRgb()
+            redVal = pixelRGB[0]
+            greenVal = pixelRGB[1]
+            blueVal = pixelRGB[2]
+            if greenVal == 255 and blueVal == 255:
+                #This pixel would be white if red channel set to 255
+                #so set the green and blue channels to zero
+                greenVal = blueVal = 0
+            value = qRgb(255, greenVal, blueVal)
+            self.qimage.setPixel(x, y, value)
+            #convert QImage to QPixmap to be able to update image
+            #with filled ROI
+            self.pixMap = QPixmap.fromImage(self.qimage)
+            self.update()
+
+
+    def getRoiMeanAndStd(self):
+        mean = round(np.mean(np.extract(self.mask, self.pixelArray)), 3)
+        std = round(np.std(np.extract(self.mask, self.pixelArray)), 3)
+        return mean, std
+
+
+    def getListRoiInnerPoints(self, mask):
+        #result = np.nonzero(self.mask)
+        result = np.where(mask == True)
+        return list(zip(result[0], result[1]))
+
+
+    def getMask(self, roiLineCoords):
+            ny, nx = np.shape(self.pixelArray)
+            #print("roiLineCoords ={}".format(roiLineCoords))
+            # Create vertex coordinates for each grid cell...
+            # (<0,0> is at the top left of the grid in this system)
+            x, y = np.meshgrid(np.arange(nx), np.arange(ny))
+            x, y = x.flatten(), y.flatten()
+            points = np.vstack((x, y)).T #points = every [x,y] pair within the original image
+        
+            #print("roiLineCoords={}".format(roiLineCoords))
+            roiPath = MplPath(roiLineCoords)
+            #print("roiPath={}".format(roiPath))
+            self.mask = roiPath.contains_points(points).reshape((ny, nx))
+            
 
     def mousePressEvent(self, event):
         pass
@@ -511,8 +511,9 @@ class graphicsView(QGraphicsView):
         else:
             self._zoom = 0
 
+
     def fitInView(self, scale=True):
-        rect = QRectF(self.graphicsItem.mypixmap.rect())
+        rect = QRectF(self.graphicsItem.pixMap.rect())
         if not rect.isNull():
             self.setSceneRect(rect)
             unity = self.transform().mapRect(QRectF(0, 0, 1, 1))
@@ -558,66 +559,13 @@ class Example(QMainWindow):
         gridLayoutLevels.addWidget(lblContrast, 0,2)
         gridLayoutLevels.addWidget(self.spinBoxContrast, 0,3)
 
-        self.cmbColours = QComboBox()
-        self.cmbColours.blockSignals(True)
-        self.cmbColours.addItems(listColours)
-        self.cmbColours.setCurrentIndex(0)
-        self.cmbColours.blockSignals(False)
-        
-
         self.spinBoxIntensity.valueChanged.connect(lambda: self.updateImageLevels(self.spinBoxIntensity, self.spinBoxContrast))
         self.spinBoxContrast.valueChanged.connect(lambda: self.updateImageLevels(self.spinBoxIntensity, self.spinBoxContrast))
         #self.graphicsView.graphicsItem
         self.centralwidget.layout().addWidget(self.graphicsView)
         self.centralwidget.layout().addLayout(gridLayoutLevels)
-        #self.centralwidget.layout().addWidget(self.cmbColours)
         self.centralwidget.layout().addWidget(self.coordsLabel)
         self.centralwidget.layout().addWidget(self.meanLabel)
-        #self.cmbColours.currentIndexChanged.connect(lambda: self.setColourMap(self.cmbColours))
-
-    def setColourMap(self, colourList):
-        """This function converts a matplotlib colour map into
-        a colour map that can be used by the pyqtGraph imageView widget.
-    
-        Input Parmeters
-        ***************
-            colourTable - name of the colour map
-            imv - name of the imageView widget
-            cmbColours - name of the dropdown lists of colour map names
-            lut - name of the look up table containing raw colour data
-        """
-
-        try:
-            colourTable = colourList.currentText()
-            if colourTable == None:
-                colourTable = 'gray'
-
-           # if cmbColours:
-            #    displayColourTableInComboBox(cmbColours, colourTable)   
-        
-            if colourTable == 'custom':
-                colors = lut
-            elif colourTable == 'gray':
-                colors = [[0.0, 0.0, 0.0, 1.0], [1.0, 1.0, 1.0, 1.0]]
-            else:
-                cmMap = cm.get_cmap(colourTable)
-                colourClassName = cmMap.__class__.__name__
-                if colourClassName == 'ListedColormap':
-                    colors = cmMap.colors
-                elif colourClassName == 'LinearSegmentedColormap':
-                    colors = cmMap(np.linspace(0, 1))
-          
-            positions = np.linspace(0, 1, len(colors))
-
-            imageItemPointer = self.graphicsView.graphicsItem
-            imgData, alpha = makeARGB(data=imageItemPointer.pixelArray, lut=colors)
-            imageItemPointer.qimage = makeQImage(imgData, alpha)
-            imageItemPointer.mypixmap = QPixmap.fromImage(imageItemPointer.qimage)
-            imageItemPointer.update()
-            #pgMap = pg.ColorMap(positions, colors)
-            #imv.setColorMap(pgMap)        
-        except Exception as e:
-            print('Error in setPgColourMap: ' + str(e))
 
 
     def updateImageLevels(self, spinBoxIntensity, spinBoxContrast):
@@ -637,10 +585,11 @@ class Example(QMainWindow):
             halfWidth = contrastValue/2
             minimumValue = intensityValue - halfWidth
             maximumValue = intensityValue + halfWidth
+
             imageItemPointer = self.graphicsView.graphicsItem
             imgData, alpha = makeARGB(data=imageItemPointer.pixelArray, levels=[minimumValue,  maximumValue])
             imageItemPointer.qimage = makeQImage(imgData, alpha)
-            imageItemPointer.mypixmap = QPixmap.fromImage(imageItemPointer.qimage)
+            imageItemPointer.pixmap = QPixmap.fromImage(imageItemPointer.qimage)
             imageItemPointer.update()
         except Exception as e:
             print('Error in updateImageLevels: ' + str(e))

@@ -21,6 +21,9 @@
     <EnableUnmanagedDebugging>false</EnableUnmanagedDebugging>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="cmap2pixmap.py">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="example1.py">
       <SubType>Code</SubType>
     </Compile>
@@ -36,6 +39,9 @@
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="DrawingROI.py">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="sketchpad.py">
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="splitterExample.py">
